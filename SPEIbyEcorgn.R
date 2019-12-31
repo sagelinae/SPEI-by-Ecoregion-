@@ -8,6 +8,7 @@ library(raster)
 library(ncdf4)
 library(rgdal)
 library(sf)
+library(rgeos)
 
 #Visuals
 library(leaflet)
@@ -143,6 +144,49 @@ leaflet(SPEIValues) %>%
   addLegend(values = ~X2015, pal = qpal, title = "SPEI")
 
 ###
+#Static Plot
+###
+#Get baselayer of states
+CAN <- getData('GADM', country="CAN", level=1) # provinces
+USA <- getData('GADM', country="USA", level=1)
+MEX <- getData('GADM', country="MEX", level=1)
+
+newProj <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0 ")
+
+CAN.Pr <- spTransform(CAN, newProj)
+USA.Pr <- spTransform(USA, newProj) 
+MEX.Pr <- spTransform(MEX, newProj) 
+northamerica <- rbind(CAN.Pr,USA.Pr,MEX.Pr)
+
+i <- intersect(SPEIValues, northamerica)
+OurStates <- i@data$NAME_1
+states <- northamerica[which(northamerica$NAME_1 %in% OurStates),]
+states@bbox <- SPEIValues@bbox
+plot(states, border='antiquewhite4')
+axis(side = 1, at = c(-145, -45)); mtext(side = 1, 'Longitude', line = 3, cex = 1.5)
+axis(side = 2);mtext(side = 2, 'Latitude', line = 3, cex = 1.5)
+plot(SPEIValues, add = T, col = qpal(SPEIValues$X2015))
+
+
+
+###
+#GGplot - also witchcraft
+###
+ggplot() + 
+  geom_polygon(data = SPEIValues, aes(x=long, y = lat, group = group), color = 'white') 
+
+colors <- c(qpal(SPEIValues$X2015),rep('pink',times=24))
+ggplot() + 
+  geom_polygon(data = states, aes(x=long, y = lat, group = group), fill = NA, color = 'grey') +
+  geom_polygon(data = SPEIValues, aes(x=long, y = lat, group = group, fill = group)) + 
+  theme(legend.position = 'none')
+  scale_fill_manual(values= qpal(SPEIValues$X2015)) +
+  #theme_classic() + 
+  #coord_fixed(xlim = ppr.eco1@bbox[1,], ylim = ppr.eco1@bbox[2,], ratio = 1.3) +
+  #labs(title = 'Prairie Pothole Region', x = 'Longitude', y = 'Latitude') +
+  theme(legend.position = 'none')#legend.position=c(0.9,0.9), legend.background=element_rect(fill=alpha('grey',0)))
+
+###
 #Static Map
 #GGmap here? For static visualization? Nvm ggmap is literally witchcraft 
 ###
@@ -156,6 +200,8 @@ sitemap <- ggmap(BaseMap)
 nicemap <- sitemap +
            labs(x = "Longitude", y = "Latitude") +
            geom_polygon(data = EcoFixProj)
+
+
 
 ###
 #Cool gif through the years here? kinda like mG's? 
