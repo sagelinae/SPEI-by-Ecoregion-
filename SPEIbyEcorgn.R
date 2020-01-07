@@ -26,20 +26,20 @@ load("X:/BSS_TVR_waterfowl/scripts/mallards_pre_season/start.RData")
 
 #Specific regions we're interested in from mall_region.R
 codes <- c('8.5.4','8.1.1','5.3.1','5.3.3','8.1.7','8.1.3','8.1.8','8.1.9','8.3.1','5.2.3', #AF
-           '5.4.1','5.4.3','3.3.2',                                                         #BF
-           '6.2.8','6.2.11','11.1.1','11.1.2','10.1.3','10.1.5',                            #CV
+           '5.4.1','5.4.3','3.3.2', '5.4.2 ',                                               #BF
+           '6.2.8','6.2.11','11.1.1','11.1.2',                                              #CV
            '5.2.2','5.2.1','8.1.4','8.1.5','8.2.1','8.1.6','8.2.2','8.1.2','8.1.10',        #GL
            '9.2.1','9.3.1','9.2.2',                                                         #PPR
-           '7.1.7','7.1.9','10.1.1','10.1.2','10.1.8','6.2.9','6.2.3','6.2.2'               #PNW
+           '7.1.7','7.1.9', '6.2.9','6.2.3','6.2.2'                                         #PNW
            )
 
 #Our regions
 AF <- c('8.5.4','8.1.1','5.3.1','5.3.3','8.1.7','8.1.3','8.1.8','8.1.9','8.3.1','5.2.3') # Atlantic flyway
-BF <- c('5.4.1','5.4.3','3.3.2') # Boreal forest
-CV <- c('6.2.8','6.2.11','11.1.1','11.1.2','10.1.3','10.1.5') # Central Valley
+BF <- c('5.4.1','5.4.3','3.3.2', '5.4.2') #Added 5.4.2 # Boreal forest
+CV <- c('6.2.8','6.2.11','11.1.1','11.1.2')#Took out,'10.1.3','10.1.5')  # Central Valley
 GL <- c('5.2.2','5.2.1','8.1.4','8.1.5','8.2.1','8.1.6','8.2.2','8.1.2','8.1.10') # Great Lakes
 PP <- c('9.2.1','9.3.1','9.2.2') # PPR
-RM <- c('7.1.7','7.1.9','10.1.1','10.1.2','10.1.8','6.2.9','6.2.3','6.2.2') # Rivers and mountains in Pacific Northwest
+RM <- c('7.1.7','7.1.9','6.2.9','6.2.3','6.2.2') #Took out '10.1.1','10.1.2','10.1.8', # Rivers and mountains in Pacific Northwest
 
 #Subset out the ecoregions map based on the regions we're interested in above
 oureco <- ecorgns[ecorgns@data$NA_L3CODE %in% codes,]
@@ -48,7 +48,7 @@ crs(oureco)
 #Change the projection to match the projection in the raster of SPEI
 EcoFixProj <- spTransform(oureco, CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0 "))
 crs(EcoFixProj)
-plot(EcoFixProj, main = "Study Ecoregions w/ Fixed Projection")
+#plot(EcoFixProj, main = "Study Ecoregions w/ Fixed Projection")
 
 ##################################
 #Extracting SPEI Values
@@ -63,20 +63,21 @@ crs(SPEI.raw)
 
 #Cut SPEI to the months we're interested in (April-September)
 month.patterns <- c("\\.04\\.", "\\.05\\.", "\\.06\\.", "\\.07\\.", "\\.08\\.", "\\.09\\.")
+month.patterns <- c("\\.04\\.", "\\.05\\.", "\\.06\\.", "\\.07\\.", "\\.08\\.")
 SPEI.month <- raster::subset(SPEI.raw, grep(pattern = paste0(month.patterns, collapse = "|"), names(SPEI.raw), value = T))
 
 #Cut to the years we're interested in (1960 - 2015)
-yr.patterns <- c("1960":"2015")
+yr.patterns <- c("1961":"2015")
 SPEI.yr <- raster::subset(SPEI.month, grep(pattern = paste0(yr.patterns, collapse = "|"), names(SPEI.month), value = T))
 rm(SPEI.month)
 
 #Average those months for a yearly estimate
 #https://stevemosher.wordpress.com/2010/08/28/brick-testing-stackapply/
-yeardex <- rep(1:56, each = 6) #Creates a vector to take the timeline of months and years. 
+yeardex <- rep(1:55, each = 5) #Creates a vector to take the timeline of months and years. 
 
 #this takes a while :/
 SPEI.avg <- stackApply(SPEI.yr, indices = yeardex, fun = mean, na.rm=TRUE)
-names(SPEI.avg) <- c(1960:2015)
+names(SPEI.avg) <- c(1961:2015)
 #plot(SPEI.year)
 
 ###
@@ -84,14 +85,14 @@ names(SPEI.avg) <- c(1960:2015)
 ###
 
 #Just testing it with one month in 1960, can help make it easier to understand what's going on lol
-YR1960 <- SPEI.avg[[1]] 
-plot(YR1960, main = "SPEI - 1960")
-
-#overlaying our ecoregions so we get the correct values
-YR1960.crop <- crop(YR1960, EcoFixProj)
-YR1960.mask <- mask(YR1960.crop, EcoFixProj)
-plot(YR1960.mask)
-plot(EcoFixProj, add = TRUE, lwd = 2)
+# YR1960 <- SPEI.avg[[1]] 
+# plot(YR1960, main = "SPEI - 1960")
+# 
+# #overlaying our ecoregions so we get the correct values
+# YR1960.crop <- crop(YR1960, EcoFixProj)
+# YR1960.mask <- mask(YR1960.crop, EcoFixProj)
+# plot(YR1960.mask)
+# plot(EcoFixProj, add = TRUE, lwd = 2)
 
 ###
 #Extract SPEI values for all years by ecoregions, take the average among all the pixels for each level 3 polygon
@@ -123,6 +124,10 @@ GL.SPEI <- meanloc(region = GL)
 PP.SPEI <- meanloc(region = PP)
 RM.SPEI <- meanloc(region = BF)
 
+rm(eco, EcoFixProj, ecorgns, enc, enc_vec, enc.eco, encounters, mall.enc, mall.rel, oureco, rel, rel_vec, rel.eco, releases, 
+   SPEI.avg, SPEI.raw, SPEI.yr)
+#save.image(file='EcoSPEI.RData')
+#plot(PP.SPEI$SPEI)
 
 ##################################
 #Visualization
@@ -135,13 +140,13 @@ RM.SPEI <- meanloc(region = BF)
 #Replace years with the year you're interested in. 
 #Yooo this could easily be a shiny map where you toggle what year you wanna see 
 #Could be fun to add like some points of birds to show where they are? If that data exists?
-qpal <- colorNumeric("RdYlBu", SPEIValues$X2015)
+qpal <- colorNumeric("RdYlBu", SPEIValues$X1988)
 
 leaflet(SPEIValues) %>% 
-  addPolygons(stroke = T, fillColor = ~qpal(X2015), opacity = 1, 
+  addPolygons(stroke = T, fillColor = ~qpal(X1988), opacity = 1, 
               fillOpacity = 0.9, color = "black", smoothFactor = 0.5, weight = 1) %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
-  addLegend(values = ~X2015, pal = qpal, title = "SPEI")
+  addLegend(values = ~X1988, pal = qpal, title = "SPEI")
 
 ###
 #Static Plot
