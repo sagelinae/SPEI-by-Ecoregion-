@@ -2,7 +2,7 @@
 #Extract values for SPEI based on EPA's ecoregions
 #SPEI Data: https://spei.csic.es/database.html - Time-scale 1 month
 #EPA Ecoregion: https://www.epa.gov/eco-research/ecoregions-north-america - Level III 
-#SLE Winter 2019
+#SLE/MGL Winter 2019
 ############################################
 library(raster)
 library(ncdf4)
@@ -22,16 +22,8 @@ library(maps)
 ##################################
 
 load("X:/BSS_TVR_waterfowl/scripts/mallards_pre_season/start.RData")
+#load("/Volumes/NRES_Faculty/jsedinger/BSS_TVR_waterfowl/scripts/mallards_pre_season/start.RData")
 #plot(ecorgns, main = "Ecoregions")
-
-#Specific regions we're interested in from mall_region.R
-codes <- c('8.5.4','8.1.1','5.3.1','5.3.3','8.1.7','8.1.3','8.1.8','8.1.9','8.3.1','5.2.3', #AF
-           '5.4.1','5.4.3','3.3.2', '5.4.2 ',                                               #BF
-           '6.2.8','6.2.11','11.1.1','11.1.2',                                              #CV
-           '5.2.2','5.2.1','8.1.4','8.1.5','8.2.1','8.1.6','8.2.2','8.1.2','8.1.10',        #GL
-           '9.2.1','9.3.1','9.2.2',                                                         #PPR
-           '7.1.7','7.1.9', '6.2.9','6.2.3','6.2.2'                                         #PNW
-           )
 
 #Our regions
 AF <- c('8.5.4','8.1.1','5.3.1','5.3.3','8.1.7','8.1.3','8.1.8','8.1.9','8.3.1','5.2.3') # Atlantic flyway
@@ -41,8 +33,10 @@ GL <- c('5.2.2','5.2.1','8.1.4','8.1.5','8.2.1','8.1.6','8.2.2','8.1.2','8.1.10'
 PP <- c('9.2.1','9.3.1','9.2.2') # PPR
 RM <- c('7.1.7','7.1.9','6.2.9','6.2.3','6.2.2') #Took out '10.1.1','10.1.2','10.1.8', # Rivers and mountains in Pacific Northwest
 
+allRegions <- c(AF,BF,CV,GL,PP,RM)
+
 #Subset out the ecoregions map based on the regions we're interested in above
-oureco <- ecorgns[ecorgns@data$NA_L3CODE %in% codes,]
+oureco <- ecorgns[ecorgns@data$NA_L3CODE %in% allRegions,]
 crs(oureco)
 
 #Change the projection to match the projection in the raster of SPEI
@@ -61,8 +55,9 @@ ncfname <- "spei01.nc"
 SPEI.raw <- brick(ncfname)
 crs(SPEI.raw)
 
-#Cut SPEI to the months we're interested in (April-September)
-month.patterns <- c("\\.04\\.", "\\.05\\.", "\\.06\\.", "\\.07\\.", "\\.08\\.", "\\.09\\.")
+#Cut SPEI to the months we're interested in (April-September) 
+#     We decided to nix sept because it's generally a lot more wet than the other months and skews average
+#month.patterns <- c("\\.04\\.", "\\.05\\.", "\\.06\\.", "\\.07\\.", "\\.08\\.", "\\.09\\.")
 month.patterns <- c("\\.04\\.", "\\.05\\.", "\\.06\\.", "\\.07\\.", "\\.08\\.")
 SPEI.month <- raster::subset(SPEI.raw, grep(pattern = paste0(month.patterns, collapse = "|"), names(SPEI.raw), value = T))
 
@@ -102,6 +97,71 @@ SPEIValues <- extract(SPEI.avg, EcoFixProj, fun = mean, na.rm = T, sp = T)
 
 #*** Weights???
 #SPEIValuesWeights <- extract(SPEI.avg, EcoFixProj, fun = mean, na.rm = T, sp = T, )
+
+###############################################
+# Weighted... I think
+###############################################
+
+library(dplyr)
+library(stringr)
+
+rel1 <- rel %>%
+  filter(B.Year < 2016 & B.Year > 1960)
+
+coords <- data.frame(x=rel1$GISBLong, y=rel1$GISBLat, year=rel1$B.Year, 
+                     region=as.character(rel1$NA_L3CODE), stringsAsFactors = F)
+
+coords1 <- coords %>%
+  filter(region %in% allRegions)
+
+pts_extract <- extract(SPEI.avg, coords1[,1:2], 'simple')
+pts_extract
+
+colnames(pts_extract) <- as.numeric(substr(colnames(pts_extract),2,5))
+
+years <- as.numeric(colnames(pts_extract))
+relYrs <- as.numeric(coords1$year)
+summary(relYrs)
+
+mtchs <- match(relYrs, years)
+
+pts_new <- data.frame(year=relYrs, value=rep(NA,times=length(relYrs)), L3=coords1$region, stringsAsFactors = F)
+
+value <- NA
+for(i in 1:nrow(pts_extract)){
+  value <- pts_extract[i,mtchs[i]]
+  pts_new[i,2] <- value
+}
+head(pts_new)
+
+
+#################
+# There are NAs
+# Why????????????
+#################
+
+meanloc  <-  function(region){
+  muLoc <- pts_new %>%
+    filter(L3 %in% region) %>%
+    group_by(year) %>%
+    summarise(avg=mean(value,na.rm=T))
+  return(as.data.frame(muLoc))
+} 
+
+AF.SPEI <- meanloc(region = AF)
+BF.SPEI <- meanloc(region = BF)
+CV.SPEI <- meanloc(region = CV)
+GL.SPEI <- meanloc(region = GL)
+PP.SPEI <- meanloc(region = PP)
+RM.SPEI <- meanloc(region = BF)
+
+SPEIValues <- extract(SPEI.avg, EcoFixProj, fun = mean, na.rm = T, sp = T)
+totals <- data.frame(year=1961:2015, AF=AF.SPEI[,2], BF=BF.SPEI[,2], CV=CV.SPEI[,2], GL=GL.SPEI[,2],
+                     PP=PP.SPEI[,2], RM=RM.SPEI[,2])
+totals <- as.matrix(totals)
+###############################################
+# Weighted... end
+###############################################
 
 ###
 #Average SPEI for 1 value per region
